@@ -263,9 +263,14 @@
   if (anyValued) {
     assetCols.push(["時価", p => A.equity(p) ? A.plain(p.marketValue) : "—", 1]);
     assetCols.push(["含み損益", p => A.equity(p) ? A.plHTML(A.equity(p).pl) : "—", 1]);
+    /* 根拠と評価日を1行に並べると A4 縦で右端が切れるので、日付は下の行に落とす。 */
     assetCols.push(["評価の根拠", p => {
-      const parts = [p.valuationBasis, p.valuedAt ? p.valuedAt + " 時点" : null].filter(Boolean);
-      return parts.length ? esc(parts.join(" ／ ")) : "—";
+      if (!p.valuationBasis && !p.valuedAt) return "—";
+      return (p.valuationBasis ? esc(p.valuationBasis) : "") +
+        (p.valuedAt
+          ? '<small style="display:block;font-weight:400;color:var(--text-muted)">' +
+            esc(p.valuedAt) + " 時点</small>"
+          : "");
     }]);
   }
   table("r-re-asset", null, assetCols);
