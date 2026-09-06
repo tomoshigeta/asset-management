@@ -14,13 +14,15 @@
 | モック作成 | ✅ 完了（`mock/`） |
 | データ形式の確定と JSON 読み込み | ✅ 完了（`data/template.json`・`data/README.md`） |
 | 入力手段（Excel 入力シート） | ✅ 完了（`data/input-sheet.xlsx`） |
-| 実データでの試運転 | ⬜ 未着手 |
+| 実データでの試運転 | 🔄 進行中 |
 | 実装 | ⬜ 未着手 |
 
 出発点の資料は [`docs/`](docs/) にあります。
 
 - `01-hand-sketch.pdf` / `.png` — 最初の手書きスケッチ
 - `02-first-page-mockup.html` — 最初に作った1枚目のUI（現在のモックの原型）
+- `03-summary.png` / `04-accounts.png` — README に貼っている現在の画面
+  （サンプルデータ。実データでは撮り直さないこと）
 
 ---
 
