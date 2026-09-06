@@ -250,6 +250,7 @@
         { cls: "seg-debt",   value: A.TOTAL_DEBT,                    label: "全ローン 残債" }
       ], A.sum(debtRows, r => r.principal)) + '</td></tr></tbody>';
 
+  A.foldNotes();
   A.initTooltip();
 })();
 </script>

@@ -179,27 +179,41 @@ RE_HEAD = ["物件名", "住所", "広さ(㎡)", "階数", "築年数",
            "自己資金", "当初借入額", "残債", "借入先", "金利(年%)",
            "借入期間(当初)\n年", "借入期間(当初)\nか月", "毎月の返済額",
            "家賃収入(月)", "管理費(月)", "修繕積立金(月)", "固定資産税(年額)",
-           "総投資額", "累計返済額", "固定資産税(月)", "月次収支", "借入期間 合計(か月)"]
-RE_W = [16, 24, 9, 12, 8, 13, 13, 13, 14, 10, 11, 11, 13, 13, 12, 13, 15, 14, 13, 14, 13, 15]
+           "時価\n(任意)", "評価日\n(任意)", "評価の根拠\n(任意)",
+           "総投資額", "累計返済額", "固定資産税(月)", "月次収支", "借入期間 合計(か月)", "含み損益"]
+RE_W = [16, 24, 9, 12, 8, 13, 13, 13, 14, 10, 11, 11, 13, 13, 12, 13, 15,
+        15, 12, 20, 14, 13, 14, 13, 15, 14]
 head_row(ws, 4, RE_HEAD, RE_W)
 RE_R0, RE_R1 = 5, 14                      # 5 = 見本、6..14 = 入力
 ws.cell(row=RE_R0, column=1, value="（例）物件A")
-for col, val in zip(range(2, 18),
+for col, val in zip(range(2, 21),
                     ["東京都港区白金台", 45.5, "3 / 10 階", 15,
                      10000000, 40000000, 35500000, "A銀行", 1.8, 26, 11, 128000,
-                     180000, 12000, 8000, 108000]):
+                     180000, 12000, 8000, 108000,
+                     58000000, "2026-08-01", "不動産会社の査定書"]):
     ws.cell(row=RE_R0, column=col, value=val)
 for r in range(RE_R0, RE_R1 + 1):
-    ws.cell(row=r, column=18, value=f"=F{r}+G{r}")                       # 総投資額
-    ws.cell(row=r, column=19, value=f"=G{r}-H{r}")                       # 累計返済額
-    ws.cell(row=r, column=20, value=f"=ROUND(Q{r}/12,0)")                # 固定資産税(月)
-    ws.cell(row=r, column=21, value=f"=N{r}-M{r}-O{r}-P{r}-T{r}")        # 月次収支
-    ws.cell(row=r, column=22, value=f"=K{r}*12+L{r}")                    # 借入期間 合計(か月)
+    ws.cell(row=r, column=21, value=f"=F{r}+G{r}")                       # 総投資額
+    ws.cell(row=r, column=22, value=f"=G{r}-H{r}")                       # 累計返済額
+    ws.cell(row=r, column=23, value=f"=ROUND(Q{r}/12,0)")                # 固定資産税(月)
+    ws.cell(row=r, column=24, value=f"=N{r}-M{r}-O{r}-P{r}-W{r}")        # 月次収支
+    ws.cell(row=r, column=25, value=f"=K{r}*12+L{r}")                    # 借入期間 合計(か月)
+    ws.cell(row=r, column=26, value=f'=IF(R{r}="","",R{r}-U{r})')        # 含み損益 = 時価 − 総投資額
 RE_FMT = {3: NUM1, 6: YEN, 7: YEN, 8: YEN, 10: RATE, 13: YEN,
-          14: YEN, 15: YEN, 16: YEN, 17: YEN, 18: YEN, 19: YEN, 20: YEN, 21: YEN}
-style_block(ws, RE_R0, RE_R1, 22, {18, 19, 20, 21, 22}, RE_FMT, example_row=RE_R0)
-for c in (18, 19, 20, 21, 22):
+          14: YEN, 15: YEN, 16: YEN, 17: YEN, 18: YEN,
+          21: YEN, 22: YEN, 23: YEN, 24: YEN, 26: YEN}
+style_block(ws, RE_R0, RE_R1, 26, {21, 22, 23, 24, 25, 26}, RE_FMT, example_row=RE_R0)
+for c in (21, 22, 23, 24, 25, 26):
     ws.cell(row=RE_R0, column=c).font = EX; ws.cell(row=RE_R0, column=c).fill = FILL_EX
+ws.cell(row=4, column=18).comment = Comment(
+    "今売ったらいくらか、の推定額です。空欄で構いません。"
+    "全物件に入れると、①サマリーに総資産と純資産が出ます。"
+    "1件でも空欄なら、純資産は出しません（実態より小さく出るため）。",
+    "入力シート", width=310, height=110)
+ws.cell(row=4, column=20).comment = Comment(
+    "その時価をどう出したか。例: 不動産会社の査定書 / 取引事例 / 路線価から換算 / 自己推定。"
+    "空欄で構いませんが、書いておくと後から根拠をたどれます。",
+    "入力シート", width=310, height=100)
 ws.cell(row=4, column=17).comment = Comment(
     "年額を入れてください。1年ぶんです。右の「固定資産税(月)」は 12 で割った平均月額で、自動計算です。", "入力シート", width=280, height=90)
 ws.cell(row=4, column=11).comment = Comment(
@@ -378,13 +392,18 @@ r += 1
 ws.cell(row=r, column=1, value="不動産").font = H2
 r += 1
 re_items = [
-    ("総投資額",   f"={re_sum_ex('R')}", YEN, "自己資金 ＋ 当初借入額"),
+    ("総投資額",   f"={re_sum_ex('U')}", YEN, "自己資金 ＋ 当初借入額"),
     ("自己資金累計", f"={re_sum_ex('F')}", YEN, ""),
     ("借入総額",   f"={re_sum_ex('G')}", YEN, "当初の借入額の合計"),
     ("残債合計",   f"={re_sum_ex('H')}", YEN, ""),
-    ("累計返済額", f"={re_sum_ex('S')}", YEN, "借入総額 − 残債合計"),
-    ("返済進捗率", f"=IFERROR({re_sum_ex('S')}/{re_sum_ex('G')},0)", PCT1, "累計返済額 ÷ 借入総額"),
-    ("月次収支の合計", f"={re_sum_ex('U')}", YEN, "家賃 − 返済 − 経費。マイナスなら持ち出しです"),
+    ("累計返済額", f"={re_sum_ex('V')}", YEN, "借入総額 − 残債合計"),
+    ("返済進捗率", f"=IFERROR({re_sum_ex('V')}/{re_sum_ex('G')},0)", PCT1, "累計返済額 ÷ 借入総額"),
+    ("月次収支の合計", f"={re_sum_ex('X')}", YEN, "家賃 − 返済 − 経費。マイナスなら持ち出しです"),
+    ("時価合計", f'=IF(COUNT(\'不動産\'!$R${RE_R0+1}:$R${RE_R1})=0,0,{re_sum_ex("R")})', YEN,
+                 "手で入れた推定値。空欄の物件は数えません"),
+    ("　うち含み損益", f'=IF(COUNT(\'不動産\'!$R${RE_R0+1}:$R${RE_R1})=0,0,{re_sum_ex("Z")})', YEN,
+                       "時価 − 総投資額（時価を入れた物件だけ）"),
+    ("LTV", f'=IFERROR({re_sum_ex("H")}/{re_sum_ex("R")},0)', PCT1, "残債合計 ÷ 時価合計"),
 ]
 for label, formula, fmt, desc in re_items:
     ws.cell(row=r, column=1, value=label).font = BODY
@@ -408,6 +427,34 @@ for label, formula, fmt, desc in debt_items:
     c.font, c.number_format, c.border, c.fill = (H2 if label == "総負債" else CALC), fmt, BOX, FILL_CALC
     ws.cell(row=r, column=1).border = BOX
     ws.cell(row=r, column=3, value=desc).font = MUTED
+    r += 1
+
+r += 1
+ws.cell(row=r, column=1, value="総資産・純資産").font = H2
+r += 1
+note(ws, r, "全物件に時価が入っているときだけ計算します。1件でも空欄なら "
+            "純資産が実態より小さく出るため、金額を出しません。", col=3)
+NVALUED = f"COUNT('不動産'!$R${RE_R0+1}:$R${RE_R1})"
+NPROPS  = f"COUNTA('不動産'!$A${RE_R0+1}:$A${RE_R1})"
+GUARD   = f'IF({NVALUED}<>{NPROPS},"時価未入力あり",'
+FIN     = f"{SEC_V}+{INS_V}+{DEP_V}"
+DEBT    = f"{re_sum_ex('H')}+SUM('その他の借入'!E{OL_R0 + 1}:E{OL_R1})"
+nw_items = [
+    ("時価を入れた物件数", f"={NVALUED}&\" / \"&{NPROPS}&\" 物件\"", None, "ここが揃うと下の2つが出ます"),
+    ("総資産", f"={GUARD}{FIN}+{re_sum_ex('R')})", YEN, "金融資産 ＋ 不動産（時価）"),
+    ("純資産", f"={GUARD}{FIN}+{re_sum_ex('R')}-({DEBT}))", YEN, "総資産 − 総負債"),
+]
+for label, formula, fmt, desc in nw_items:
+    ws.cell(row=r, column=1, value=label).font = H2 if label == "純資産" else BODY
+    c = ws.cell(row=r, column=2, value=formula)
+    c.font, c.border, c.fill = (H2 if label == "純資産" else CALC), BOX, FILL_CALC
+    if fmt:
+        c.number_format = fmt
+    else:
+        c.alignment = Alignment(horizontal="center")
+    ws.cell(row=r, column=1).border = BOX
+    ws.cell(row=r, column=3, value=desc).font = MUTED
+    ws.cell(row=r, column=3).border = BOX
     r += 1
 
 r += 2

@@ -40,6 +40,11 @@
       need(p, "name", "string", w);
       need(p, "areaSqm", "number", w);
       need(p, "ageYears", "number", w);
+      /* 時価は任意（一意に決まらないため必須にしない）。
+         入っているときだけ、物件別の含み損益と LTV を出す。 */
+      if (p && p.marketValue !== undefined && !isNum(p.marketValue)) {
+        errs.push(w + " の marketValue（時価）が数字ではありません");
+      }
       const okInv = need(p, "totalInvestment", "number", w);
       const okOwn = need(p, "ownFunds", "number", w);
       if (!p || !p.loan || typeof p.loan !== "object") { errs.push(w + " に「loan」がありません"); return; }
@@ -255,6 +260,30 @@
   };
   RE.progress = RE.cumulativeRepaid / RE.principal;
 
+  /* ---------- 不動産の時価 ----------
+     時価は一意に決まらないので任意入力。入っている物件だけ含み損益を出す。
+     総資産・純資産は「全物件に時価が入っているとき」だけ計算する。
+     1件でも欠けたまま引き算すると、資産側だけが小さく出て純資産を過小評価するため
+     （SPEC が当初 純資産を却下した理由そのもの）。 */
+  const hasMV = p => isNum(p.marketValue);
+  RE.valuedCount  = D.realEstate.filter(hasMV).length;
+  RE.missingCount = D.realEstate.length - RE.valuedCount;
+  RE.allValued    = RE.missingCount === 0;
+  RE.marketValue  = sum(D.realEstate.filter(hasMV), p => p.marketValue);
+  RE.pl  = RE.allValued ? RE.marketValue - RE.totalInvestment : null;
+  RE.ltv = RE.allValued && RE.marketValue > 0 ? RE.balance / RE.marketValue : null;
+
+  /* 物件ごとの含み損益と LTV（時価が入っている物件のみ） */
+  function equity(p) {
+    if (!hasMV(p)) return null;
+    return {
+      marketValue: p.marketValue,
+      pl: p.marketValue - p.totalInvestment,
+      ltv: p.marketValue > 0 ? p.loan.balance / p.marketValue : null,
+      ownEquity: p.marketValue - p.loan.balance      /* 時価のうち自分の持ち分 */
+    };
+  }
+
   /* 月次収支: 家賃 − ローン返済 − 経費（管理費・修繕積立・固都税） */
   function cashflow(p) {
     const m = p.monthly;
@@ -320,6 +349,11 @@
   const OTHER_DEBT = sum(D.otherLoans, l => l.balance);
   const TOTAL_DEBT = RE.balance + OTHER_DEBT;
 
+  /* 総資産・純資産は、全物件に時価が入っているときだけ出す。
+     欠けているときは null にして、画面には「時価未入力 N件」と表示する。 */
+  const TOTAL_ASSETS = RE.allValued ? FINANCIAL_ASSETS + RE.marketValue : null;
+  const NET_WORTH    = RE.allValued ? TOTAL_ASSETS - TOTAL_DEBT : null;
+
   /* ---------- 描画ヘルパ ---------- */
 
   /** 積み上げ横棒 1本。segs = [{cls, value, label}] */
@@ -370,7 +404,8 @@
     const pages = [
       ["index.html",      "① サマリー"],
       ["realestate.html", "② 不動産"],
-      ["accounts.html",   "③ 資産・負債明細"]
+      ["accounts.html",   "③ 資産・負債明細"],
+      ["report.html",     "提出用（印刷・PDF）"]
     ];
     const nav = pages.map(([href, label]) =>
       '<a href="' + href + '"' + (href === current ? ' aria-current="page"' : "") + ">" + label + "</a>"
@@ -395,6 +430,49 @@
           "物件追加<small>準備中</small>" +
         "</button>" +
       "</div>";
+  }
+
+  /* ---------- 解説のたたみ込み ----------
+     読み方の説明は毎月見る人には邪魔なのでたたむ。開閉はブラウザに覚えさせる。
+     判断を誤らせないための短い囲み（.callout）はたたまない。
+     印刷時は @media print で中身を必ず見せる（提出先は README を読めないため）。 */
+  function foldNotes(label) {
+    const key = "assetDashboard.notesOpen";
+    let open = false;
+    try { open = localStorage.getItem(key) === "1"; } catch (e) {}
+    document.querySelectorAll("section > .sec-note").forEach(note => {
+      const d = document.createElement("details");
+      d.className = "note-fold";
+      if (open) d.open = true;
+      const sm = document.createElement("summary");
+      sm.textContent = label || "この表の読み方";
+      note.parentNode.insertBefore(d, note);
+      d.appendChild(sm);
+      d.appendChild(note);
+      d.addEventListener("toggle", () => {
+        if (printing) return;                 /* 印刷のための開閉は記憶しない */
+        try { localStorage.setItem(key, d.open ? "1" : "0"); } catch (e) {}
+        document.querySelectorAll(".note-fold").forEach(o => { o.open = d.open; });
+      });
+    });
+
+    /* 印刷のあいだは必ず開く。閉じた <details> の中身は CSS では出せない
+       （ブラウザが内部で隠すため）ので、開閉そのものを切り替える。
+       提出先は README を読めないため、紙には説明が要る。 */
+    let printing = false;
+    const setOpen = on => {
+      printing = true;
+      document.querySelectorAll(".note-fold").forEach(d => {
+        if (on) { d.dataset.wasOpen = d.open ? "1" : "0"; d.open = true; }
+        else { d.open = d.dataset.wasOpen === "1"; }
+      });
+      printing = false;
+    };
+    addEventListener("beforeprint", () => setOpen(true));
+    addEventListener("afterprint", () => setOpen(false));
+    const mq = matchMedia("print");
+    if (mq.addEventListener) mq.addEventListener("change", e => setOpen(e.matches));
+    if (mq.matches) setOpen(true);
   }
 
   /* ---------- ツールチップ ---------- */
@@ -427,7 +505,8 @@
     D, SOURCE, validateData, parseJSONText, RE, SEC, SEC_VALUE, SEC_COST, SEC_PL, DEPOSITS,
     INS, INS_VALUE, INS_COST, INS_PL, FIN_PL,
     FINANCIAL_ASSETS, OTHER_DEBT, TOTAL_DEBT, CF_TOTAL,
+    TOTAL_ASSETS, NET_WORTH, equity,
     yen, plain, pl, plHTML, plPctHTML, pct, sum, cashflow, fmtTerm,
-    stackedBar, valueBar, plBar, sidebar, initTooltip
+    stackedBar, valueBar, plBar, sidebar, initTooltip, foldNotes
   };
 })();

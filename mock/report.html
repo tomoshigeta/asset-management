@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>提出用 — 資産可視化ダッシュボード</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+/* 提出用の紙面まわり。画面では「印刷イメージ」として同じ見た目を出す。 */
+.report-head {
+  border-bottom: 2px solid var(--text-primary);
+  padding-bottom: 14px;
+  margin-bottom: 26px;
+}
+.report-title { font-size: 20px; font-weight: 700; margin: 0 0 10px; }
+.report-meta { display: flex; flex-wrap: wrap; gap: 6px 32px; font-size: 13px; }
+.report-meta div { display: flex; gap: 10px; }
+.report-meta dt { color: var(--text-muted); min-width: 4.5em; }
+.report-meta dd { margin: 0; font-weight: 600; }
+.report-foot {
+  margin-top: 34px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+.report-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin-bottom: 24px;
+}
+.report-actions p { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.btn-print {
+  padding: 9px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn-print:hover { border-color: var(--focus); }
+.report-section { margin-bottom: 30px; }
+.report-section > h2 {
+  font-size: 15px;
+  border-left: 4px solid var(--text-primary);
+  padding-left: 9px;
+  margin: 0 0 14px;
+}
+@media print {
+  .report-actions { display: none !important; }
+  /* 節ごとに改頁すると余白だらけの厚い束になるので、流し込みにする。
+     割れて困るもの（カード・表の行）だけ break-inside で守る。 */
+  .report-section { break-inside: auto; margin-bottom: 18px; }
+  .report-section > h2 { break-after: avoid; }
+  .report-head { break-after: avoid; }
+  .report-foot { break-before: avoid; }
+}
+</style>
+</head>
+<body>
+<main style="max-width:none">
+  <div class="report-actions">
+    <button type="button" class="btn-print" id="print">この内容を印刷 / PDFに保存</button>
+    <p>
+      押すと印刷ダイアログが開きます。<b>送信先で「PDFに保存」</b>を選ぶと1つのPDFになります。
+      Mac の Chrome では、<b>「詳細設定」→「背景のグラフィック」にチェック</b>を入れてください
+      （入れないと棒グラフが白く抜けます）。
+    </p>
+  </div>
+
+  <div class="report-head">
+    <h1 class="report-title">資産・負債の状況</h1>
+    <div class="report-meta" id="meta"></div>
+  </div>
+
+  <div class="report-section">
+    <h2>1. 総括</h2>
+    <div class="kpi-row" id="r-headline"></div>
+    <div class="callout" id="r-note"></div>
+  </div>
+
+  <div class="report-section">
+    <h2>2. 不動産</h2>
+    <div class="kpi-row" id="r-re-kpi"></div>
+    <div class="card table-wrap" style="margin-top:14px">
+      <table id="r-re-asset"><caption>物件と評価</caption></table>
+    </div>
+    <div class="card table-wrap" style="margin-top:14px">
+      <table id="r-re-loan"><caption>物件ごとの借入</caption></table>
+    </div>
+    <div class="card table-wrap" style="margin-top:14px">
+      <table id="r-cf"><caption>月次収支。固定資産税は年額を12で割った平均月額です。保険料は含みません。</caption></table>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>3. 有価証券</h2>
+    <div class="card table-wrap"><table id="r-sec"></table></div>
+  </div>
+
+  <div class="report-section" id="r-ins-wrap" hidden>
+    <h2>4. 保険</h2>
+    <div class="card table-wrap"><table id="r-ins"></table></div>
+  </div>
+
+  <div class="report-section">
+    <h2 id="r-dep-h">5. 預貯金</h2>
+    <div class="card table-wrap"><table id="r-dep"></table></div>
+  </div>
+
+  <div class="report-section">
+    <h2 id="r-debt-h">6. 負債</h2>
+    <div class="card table-wrap"><table id="r-debt"></table></div>
+  </div>
+
+  <div class="report-foot" id="r-foot"></div>
+</main>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+<script>
+(function () {
+  const A = window.APP, D = A.D;
+  const esc = s => String(s).replace(/[&<>"]/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const el = id => document.getElementById(id);
+  const today = new Date().toISOString().slice(0, 10);
+
+  document.getElementById("print").onclick = () => window.print();
+
+  el("meta").innerHTML =
+    '<div><dt>氏名</dt><dd>' + esc(D.owner.name) + '</dd></div>' +
+    '<div><dt>基準日</dt><dd class="num">' + esc(D.asOf) + '</dd></div>' +
+    '<div><dt>作成日</dt><dd class="num">' + today + '</dd></div>' +
+    (D.rates && D.rates.USD ? '<div><dt>為替</dt><dd class="num">1 USD = ' + D.rates.USD + ' 円</dd></div>' : "");
+
+  /* ---------- 1. 総括 ---------- */
+  const finScope = "有価証券" + (A.INS.length ? "＋保険" : "") + "＋預貯金";
+  const kpi = (label, scope, value, sub) =>
+    '<div class="kpi lg"><div class="kpi-label">' + label + '</div>' +
+    '<div class="kpi-scope">' + scope + '</div>' +
+    '<div class="kpi-value num">' + value + '</div>' +
+    (sub ? '<div class="kpi-sub">' + sub + '</div>' : "") + '</div>';
+
+  if (A.NET_WORTH !== null) {
+    el("r-headline").innerHTML =
+      kpi("総資産", finScope + "＋不動産（時価）", A.yen(A.TOTAL_ASSETS),
+          "金融 " + A.yen(A.FINANCIAL_ASSETS) + " ／ 不動産 " + A.yen(A.RE.marketValue)) +
+      kpi("総負債", "不動産ローン＋その他", A.yen(A.TOTAL_DEBT),
+          "不動産 " + A.yen(A.RE.balance) + " ／ その他 " + A.yen(A.OTHER_DEBT)) +
+      kpi("純資産", "総資産 − 総負債", A.yen(A.NET_WORTH));
+    el("r-note").innerHTML =
+      "<b>不動産の時価は保有者が入力した推定値です。</b>" +
+      "売却価格が一意に決まるものではないため、純資産の確からしさは時価の確からしさに依存します。" +
+      "評価の根拠と評価日は「2. 不動産」の表に記載しています。";
+  } else {
+    el("r-headline").innerHTML =
+      kpi("金融資産合計", finScope + "（不動産を含まない）", A.yen(A.FINANCIAL_ASSETS),
+          "うち含み損益 " + A.plHTML(A.FIN_PL)) +
+      kpi("総負債", "不動産ローン＋その他", A.yen(A.TOTAL_DEBT),
+          "不動産 " + A.yen(A.RE.balance) + " ／ その他 " + A.yen(A.OTHER_DEBT));
+    el("r-note").innerHTML =
+      "<b>この2つは足し引きしていません。</b>" +
+      "不動産の時価を金額として持たないため資産に含めず、借入だけが総負債に含まれます。" +
+      "この非対称のまま引き算すると純資産が実態より小さく出るため、合算せず並べています。";
+  }
+
+  /* ---------- 2. 不動産 ---------- */
+  const reKpi = [["総投資額", A.yen(A.RE.totalInvestment), "自己資金＋借入額"]];
+  if (A.RE.allValued) {
+    reKpi.push(["時価合計", A.yen(A.RE.marketValue), "保有者による推定値"]);
+    reKpi.push(["含み損益", A.plHTML(A.RE.pl), "時価合計 − 総投資額"]);
+  }
+  reKpi.push(["残債合計", A.yen(A.RE.balance), "現在の返済残り"]);
+  if (A.RE.ltv !== null) reKpi.push(["LTV", A.pct(A.RE.balance, A.RE.marketValue), "残債合計 ÷ 時価合計"]);
+  reKpi.push(["返済進捗率", A.pct(A.RE.cumulativeRepaid, A.RE.principal), "累計返済額 ÷ 借入総額"]);
+  el("r-re-kpi").innerHTML = reKpi.map(([l, v, s]) =>
+    '<div class="kpi"><div class="kpi-label">' + l + '</div>' +
+    '<div class="kpi-scope">' + s + '</div>' +
+    '<div class="kpi-value num">' + v + '</div></div>').join("");
+
+  const anyValued = D.realEstate.some(p => A.equity(p));
+  /* 14列を1枚に並べると A4 縦で右端が切れるため、
+     「資産としての姿」と「借入の姿」の2枚に分ける。 */
+  function table(id, caption, cols) {
+    const el2 = document.getElementById(id);
+    el2.innerHTML +=
+      '<thead><tr><th>物件</th>' +
+        cols.map(c => '<th' + (c[2] ? ' class="n"' : "") + '>' + c[0] + "</th>").join("") +
+      '</tr></thead><tbody>' +
+      D.realEstate.map(p =>
+        '<tr><td><b>' + esc(p.name) + '</b></td>' +
+        cols.map(c => '<td' + (c[2] ? ' class="n num"' : "") + '>' + c[1](p) + "</td>").join("") +
+        "</tr>").join("") + "</tbody>";
+  }
+
+  const assetCols = [
+    ["住所", p => esc(p.address || "—")],
+    ["広さ", p => p.areaSqm.toFixed(1) + " m²", 1],
+    ["築年数", p => p.ageYears + " 年", 1],
+    ["自己資金", p => A.plain(p.ownFunds), 1],
+    ["総投資額", p => A.plain(p.totalInvestment), 1]
+  ];
+  if (anyValued) {
+    assetCols.push(["時価", p => A.equity(p) ? A.plain(p.marketValue) : "—", 1]);
+    assetCols.push(["含み損益", p => A.equity(p) ? A.plHTML(A.equity(p).pl) : "—", 1]);
+    assetCols.push(["評価の根拠", p => {
+      const parts = [p.valuationBasis, p.valuedAt ? p.valuedAt + " 時点" : null].filter(Boolean);
+      return parts.length ? esc(parts.join(" ／ ")) : "—";
+    }]);
+  }
+  table("r-re-asset", null, assetCols);
+
+  const loanCols = [
+    ["金融機関", p => esc(p.loan.lender)],
+    ["当初借入額", p => A.plain(p.loan.principal), 1],
+    ["残債", p => A.plain(p.loan.balance), 1],
+    ["金利", p => p.loan.rate.toFixed(2) + " %", 1],
+    ["期間", p => A.fmtTerm(p.loan.termMonths), 1],
+    ["月返済額", p => A.plain(p.loan.monthlyRepayment), 1],
+    ["返済進捗", p => A.pct(p.loan.cumulativeRepaid, p.loan.principal), 1]
+  ];
+  if (anyValued) {
+    loanCols.push(["LTV", p => A.equity(p) ? A.pct(p.loan.balance, p.marketValue) : "—", 1]);
+  }
+  table("r-re-loan", null, loanCols);
+
+  el("r-cf").innerHTML +=
+    '<thead><tr><th>物件</th><th class="n">家賃収入</th><th class="n">ローン返済</th>' +
+    '<th class="n">管理費</th><th class="n">修繕積立</th><th class="n">固定資産税</th>' +
+    '<th class="n">返済後収支</th></tr></thead><tbody>' +
+    D.realEstate.map(p => {
+      const c = A.cashflow(p);
+      return '<tr><td>' + esc(p.name) + '</td>' +
+        '<td class="n num">' + A.plain(c.rentIncome) + '</td>' +
+        '<td class="n num">' + A.plain(c.repayment) + '</td>' +
+        '<td class="n num">' + A.plain(c.managementFee) + '</td>' +
+        '<td class="n num">' + A.plain(c.repairReserve) + '</td>' +
+        '<td class="n num">' + A.plain(c.propertyTax) + '</td>' +
+        '<td class="n">' + A.plHTML(c.net) + '</td></tr>';
+    }).join("") +
+    '<tr class="total-row"><td>合計</td>' +
+      '<td class="n num">' + A.plain(A.CF_TOTAL.rentIncome) + '</td>' +
+      '<td class="n num">' + A.plain(A.CF_TOTAL.repayment) + '</td>' +
+      '<td class="n num" colspan="3" style="text-align:right">経費計 ' + A.plain(A.CF_TOTAL.expenses) + '</td>' +
+      '<td class="n">' + A.plHTML(A.CF_TOTAL.net) + '</td></tr></tbody>';
+
+  /* ---------- 3. 有価証券 ---------- */
+  const CLASSES = ["株", "債券", "投資信託", "その他"];
+  const REGION = { domestic: "国内", overseas: "海外" };
+  let secBody = "";
+  Object.keys(REGION).forEach(region => {
+    const rows = A.SEC.filter(s => s.region === region);
+    secBody += '<tr class="group-row"><td colspan="5">' + REGION[region] +
+               '　<span class="num">' + A.yen(A.sum(rows, s => s.valueJPY)) + "</span></td></tr>";
+    secBody += CLASSES.map(cls => {
+      const s = A.SEC.find(x => x.region === region && x.assetClass === cls);
+      if (!s) return "";
+      const note = s.note ? '<small style="color:var(--text-muted)"> ' + esc(s.note) + "</small>" : "";
+      const native = s.currency === "JPY" ? "" :
+        '<small style="color:var(--text-muted)"> ' + s.currency + " " + A.plain(s.marketValue) + "</small>";
+      return '<tr><td>' + cls + note + '</td>' +
+        '<td class="n num">' + A.plain(s.costJPY) + '</td>' +
+        '<td class="n num">' + A.plain(s.valueJPY) + native + '</td>' +
+        '<td class="n">' + A.plHTML(s.plJPY) + '</td>' +
+        '<td class="n">' + A.plPctHTML(s.plJPY, s.costJPY) + "</td></tr>";
+    }).join("");
+  });
+  el("r-sec").innerHTML =
+    '<thead><tr><th>クラス</th><th class="n">取得原価</th><th class="n">評価額</th>' +
+    '<th class="n">含み損益</th><th class="n">損益率</th></tr></thead><tbody>' + secBody +
+    '<tr class="total-row"><td>合計</td>' +
+      '<td class="n num">' + A.plain(A.SEC_COST) + '</td>' +
+      '<td class="n num">' + A.plain(A.SEC_VALUE) + '</td>' +
+      '<td class="n">' + A.plHTML(A.SEC_PL) + '</td>' +
+      '<td class="n">' + A.plPctHTML(A.SEC_PL, A.SEC_COST) + "</td></tr></tbody>";
+
+  /* ---------- 4. 保険 ---------- */
+  if (A.INS.length) {
+    el("r-ins-wrap").hidden = false;
+    const hasDeath = A.INS.some(x => x.deathBenefit);
+    el("r-ins").innerHTML =
+      '<thead><tr><th>保険</th><th class="n">払込保険料</th><th class="n">解約返戻金</th>' +
+      '<th class="n">含み損益</th>' +
+      (hasDeath ? '<th class="n">死亡保険金額<small style="display:block;font-weight:400">参考・資産に含めず</small></th>' : "") +
+      "</tr></thead><tbody>" +
+      A.INS.map(x => {
+        const sub = [x.insurer, x.valuedAt ? x.valuedAt + " 時点" : null, x.note].filter(Boolean).join(" ／ ");
+        return '<tr><td><b>' + esc(x.name) + "</b>" +
+          (sub ? '<small style="display:block;font-weight:400;color:var(--text-muted)">' + esc(sub) + "</small>" : "") +
+          "</td>" +
+          '<td class="n num">' + A.plain(x.costJPY) + '</td>' +
+          '<td class="n num">' + A.plain(x.valueJPY) + '</td>' +
+          '<td class="n">' + A.plHTML(x.plJPY) + "</td>" +
+          (hasDeath ? '<td class="n num" style="color:var(--text-muted)">' +
+            (x.deathBenefit ? A.plain(x.deathBenefit * (D.rates[x.currency] || 1)) : "—") + "</td>" : "") +
+          "</tr>";
+      }).join("") +
+      '<tr class="total-row"><td>合計</td>' +
+        '<td class="n num">' + A.plain(A.INS_COST) + '</td>' +
+        '<td class="n num">' + A.plain(A.INS_VALUE) + '</td>' +
+        '<td class="n">' + A.plHTML(A.INS_PL) + "</td>" +
+        (hasDeath ? "<td></td>" : "") + "</tr></tbody>";
+  } else {
+    el("r-dep-h").textContent = "4. 預貯金";
+    el("r-debt-h").textContent = "5. 負債";
+  }
+
+  /* ---------- 預貯金 ---------- */
+  el("r-dep").innerHTML =
+    '<thead><tr><th>金融機関</th><th class="n">残高</th><th class="n">構成比</th></tr></thead><tbody>' +
+    D.deposits.map(d =>
+      '<tr><td>' + esc(d.bank) + (d.currency === "JPY" ? "" :
+        '<small style="color:var(--text-muted)"> ' + d.currency + " " + A.plain(d.amount) + "</small>") + "</td>" +
+      '<td class="n num">' + A.plain(d.amount * (D.rates[d.currency] || 1)) + '</td>' +
+      '<td class="n num">' + A.pct(d.amount * (D.rates[d.currency] || 1), A.DEPOSITS) + "</td></tr>").join("") +
+    '<tr class="total-row"><td>合計</td><td class="n num">' + A.plain(A.DEPOSITS) +
+      '</td><td class="n num">100.0%</td></tr></tbody>';
+
+  /* ---------- 負債 ---------- */
+  const debtRows = D.otherLoans.map(l => ({
+    name: l.name, lender: l.lender, rate: l.rate.toFixed(2) + " %",
+    monthly: l.monthlyRepayment, principal: l.principal,
+    repaid: l.principal - l.balance, balance: l.balance
+  }));
+  debtRows.push({
+    name: "不動産ローン 合計", lender: D.realEstate.length + " 物件", rate: "—",
+    monthly: A.sum(D.realEstate, p => p.loan.monthlyRepayment),
+    principal: A.RE.principal, repaid: A.RE.cumulativeRepaid, balance: A.RE.balance
+  });
+  el("r-debt").innerHTML =
+    '<thead><tr><th>借入</th><th class="n">金利</th><th class="n">月返済額</th>' +
+    '<th class="n">当初借入額</th><th class="n">返済済み</th><th class="n">残債</th>' +
+    '<th class="n">返済進捗</th></tr></thead><tbody>' +
+    debtRows.map(r =>
+      '<tr><td><b>' + esc(r.name) + "</b>" +
+        '<small style="display:block;font-weight:400;color:var(--text-muted)">' + esc(r.lender) + "</small></td>" +
+      '<td class="n num">' + r.rate + '</td>' +
+      '<td class="n num">' + A.plain(r.monthly) + '</td>' +
+      '<td class="n num">' + A.plain(r.principal) + '</td>' +
+      '<td class="n num">' + A.plain(r.repaid) + '</td>' +
+      '<td class="n num">' + A.plain(r.balance) + '</td>' +
+      '<td class="n num">' + A.pct(r.repaid, r.principal) + "</td></tr>").join("") +
+    '<tr class="total-row"><td>総負債</td><td></td>' +
+      '<td class="n num">' + A.plain(A.sum(debtRows, r => r.monthly)) + '</td>' +
+      '<td class="n num">' + A.plain(A.sum(debtRows, r => r.principal)) + '</td>' +
+      '<td class="n num">' + A.plain(A.sum(debtRows, r => r.repaid)) + '</td>' +
+      '<td class="n num">' + A.plain(A.TOTAL_DEBT) + '</td>' +
+      '<td class="n num">' + A.pct(A.sum(debtRows, r => r.repaid), A.sum(debtRows, r => r.principal)) +
+      "</td></tr></tbody>";
+
+  /* ---------- 注記 ---------- */
+  el("r-foot").innerHTML =
+    "【この資料について】" +
+    "本書は保有者が作成した資産・負債の一覧であり、<b>残高証明書・登記事項証明書等の証憑ではありません</b>。" +
+    "金額はすべて基準日時点、期間を持つ金額は月額です（固定資産税は年額を12で割った平均月額。火災保険料は含みません）。" +
+    "外貨建の資産は上記の為替レートで円換算しています。" +
+    (A.INS.length ? "保険の評価額は解約返戻金であり、払込保険料には保障の対価が含まれるため、含み損益は投資の損益とは性質が異なります。死亡保険金額は資産に含めていません。" : "") +
+    (A.RE.allValued ? "不動産の時価は保有者による推定値です。" : "") +
+    "有価証券の評価額は基準日時点の時価であり、確定した売却価額ではありません。";
+
+  A.initTooltip();
+})();
+</script>
+</body>
+</html>

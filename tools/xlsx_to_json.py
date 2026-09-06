@@ -80,7 +80,7 @@ def convert(path):
         raise InputError("基本情報の JPY のレートは 1 でなければなりません")
 
     data = {
-        "formatVersion": 2,
+        "formatVersion": 3,
         "owner": {"name": text(base["B4"].value, "基本情報の氏名")},
         "asOf": as_of(base["B5"].value),
         "rates": rates,
@@ -104,6 +104,13 @@ def convert(path):
         if balance > principal:
             raise InputError(f"{w}: 残債が当初借入額より大きくなっています")
         tax_year = num(ws.cell(row=r, column=17).value, f"{w} の固定資産税(年額)", allow_blank=True)
+        # 時価・評価日・評価の根拠はすべて任意。空欄なら項目ごと出さない。
+        mv_cell = ws.cell(row=r, column=18).value
+        market = None
+        if mv_cell is not None and str(mv_cell).strip() != "":
+            market = num(mv_cell, f"{w} の時価")
+            if market < 0:
+                raise InputError(f"{w}: 時価がマイナスになっています")
         term_y = num(ws.cell(row=r, column=11).value, f"{w} の借入期間(年)", allow_blank=True)
         term_m = num(ws.cell(row=r, column=12).value, f"{w} の借入期間(か月)", allow_blank=True)
         if term_m < 0 or term_m > 11:
@@ -133,6 +140,15 @@ def convert(path):
                 "propertyTaxMonthly": int(round(tax_year / 12)),
             },
         })
+        if market is not None:
+            prop = data["realEstate"][-1]
+            prop["marketValue"] = market
+            valued = ws.cell(row=r, column=19).value
+            if valued is not None and str(valued).strip() != "":
+                prop["valuedAt"] = as_of(valued)
+            basis = ws.cell(row=r, column=20).value
+            if basis and str(basis).strip():
+                prop["valuationBasis"] = str(basis).strip()
 
     # ---------- 有価証券（国内・海外 × 4種類 = 8行で固定） ----------
     ws = wb["有価証券"]
@@ -247,6 +263,11 @@ def main():
     with open(dst, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
         f.write("\n")
+    valued = sum(1 for p in data["realEstate"] if "marketValue" in p)
+    if data["realEstate"]:
+        print(f"  不動産の時価: {valued} / {len(data['realEstate'])} 物件"
+              + ("（全物件そろっているので純資産が出ます）" if valued == len(data["realEstate"])
+                 else "（未入力があるため純資産は出ません）"))
     print(f"{dst} を書きました（不動産 {len(data['realEstate'])}件 / "
           f"保険 {len(data['insurance'])}件 / 預貯金 {len(data['deposits'])}件 / "
           f"その他の借入 {len(data['otherLoans'])}件）")

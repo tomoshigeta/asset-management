@@ -29,6 +29,8 @@ window.ASSET_DATA = {
       areaSqm: 45.5, floor: "3 / 10 階", ageYears: 15,
       totalInvestment: 50000000,
       ownFunds: 10000000,
+      /* 時価は任意。手で入れた推定値で、根拠と評価日も残せる（どちらも省略可） */
+      marketValue: 58000000, valuedAt: "2026-08-01", valuationBasis: "不動産会社の査定書",
       loan: {
         lender: "A銀行", principal: 40000000,
         balance: 35500000, cumulativeRepaid: 4500000,
@@ -45,6 +47,7 @@ window.ASSET_DATA = {
       areaSqm: 60.2, floor: "8 / 15 階", ageYears: 5,
       totalInvestment: 75000000,
       ownFunds: 15000000,
+      marketValue: 71000000, valuedAt: "2026-08-01", valuationBasis: "取引事例から推定",
       loan: {
         lender: "B信用金庫", principal: 60000000,
         balance: 58000000, cumulativeRepaid: 2000000,
@@ -61,6 +64,7 @@ window.ASSET_DATA = {
       areaSqm: 85.0, floor: "2 / 5 階", ageYears: 22,
       totalInvestment: 25000000,
       ownFunds: 5000000,
+      marketValue: 27500000, valuedAt: "2026-07-15", valuationBasis: "路線価から換算",
       loan: {
         lender: "C銀行", principal: 20000000,
         balance: 11500000, cumulativeRepaid: 8500000,

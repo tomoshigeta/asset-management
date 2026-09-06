@@ -226,8 +226,13 @@ h2 {
 /* ---------- 積み上げ横棒 ---------- */
 .bars { display: flex; flex-direction: column; gap: 16px; }
 
-.bar-row { display: grid; grid-template-columns: 108px 1fr auto; gap: 14px; align-items: center; }
+/* 棒は右端をカードの内側いっぱいまで伸ばし、③の表の棒と縦にそろえる。
+   金額を棒の右に置くと、その分だけ棒が左に押されて右端が合わなくなるため、
+   物件名と金額は棒の上の行にまとめた。 */
+.bar-row { display: grid; gap: 6px; }
+.bar-head { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
 .bar-name { font-size: 13px; font-weight: 600; }
+.bar-name small { display: inline; margin-left: 8px; }
 .bar-name small { display: block; font-weight: 400; font-size: 11px; color: var(--text-muted); }
 
 .bar-track { display: flex; gap: 2px; height: var(--bar-h); min-width: 0; position: relative; }
@@ -266,8 +271,8 @@ td .bar-track { min-width: 0; }
 .swatch-gain { background-color: var(--pl-gain-fill); }
 .swatch-loss { background-color: var(--pl-loss-fill); }
 
-.bar-total { font-size: 13px; font-weight: 700; white-space: nowrap; }
-.bar-total small { display: block; font-weight: 400; color: var(--text-muted); font-size: 11px; }
+.bar-total { font-size: 13px; font-weight: 700; white-space: nowrap; text-align: right; }
+.bar-total small { display: inline; margin-left: 8px; font-weight: 400; color: var(--text-muted); font-size: 11px; }
 
 /* 取得原価の参照マーカー（トラック全体を基準に置く） */
 .ref-mark {
@@ -372,8 +377,7 @@ tr.total-row td { font-weight: 700; border-top: 1px solid var(--border-strong); 
   .sidebar-foot { margin-top: 0; }
   .btn-future { width: auto; padding: 8px 14px; }
   main { padding: 24px 18px 60px; }
-  .bar-row { grid-template-columns: 1fr; gap: 6px; }
-  .bar-total { text-align: right; }
+  .bar-head { flex-wrap: wrap; gap: 2px 10px; }
 }
 
 /* ---------- JSON 読み込み（サイドバー下部） ---------- */
@@ -461,4 +465,95 @@ tr.total-row td { font-weight: 700; border-top: 1px solid var(--border-strong); 
   .data-source { padding: 0; }
   .btn-load { display: inline-block; margin-top: 6px; padding: 8px 14px; }
   .btn-reset { display: inline-block; width: auto; margin: 6px 0 0 8px; }
+}
+
+/* ---------- たたんだ解説 ----------
+   毎月見る人には邪魔だが、初めて見る第三者には要る。
+   画面では閉じ、印刷（＝提出）では自動で開く。 */
+.note-fold { margin: -2px 0 14px; }
+.note-fold > summary {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  list-style: none;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  user-select: none;
+}
+.note-fold > summary::-webkit-details-marker { display: none; }
+.note-fold > summary::before { content: "▶"; font-size: 9px; transition: transform .15s; }
+.note-fold[open] > summary::before { transform: rotate(90deg); }
+.note-fold > summary:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.note-fold > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.note-fold .sec-note { margin-top: 8px; }
+
+/* ============================================================
+   印刷・PDF（提出用）
+   ------------------------------------------------------------
+   ブラウザは既定で背景色を印刷しないため、そのままでは棒が
+   すべて消える。print-color-adjust で必ず刷る。
+   ダークモードのまま刷ると紙が真っ黒になるので、色は明るい側に固定する。
+   ============================================================ */
+@media print {
+  :root {
+    color-scheme: light !important;
+    --surface-page: #ffffff;
+    --surface-1:    #ffffff;
+    --surface-2:    #f2f2ef;
+    --border:       #c9c7c0;
+    --border-strong:#9a978e;
+    --text-primary: #000000;
+    --text-secondary: #333333;
+    --text-muted:   #555555;
+    --cat-equity:   #059669;
+    --cat-repaid:   #4a3aa7;
+    --cat-debt:     #3b82f6;
+    --pl-gain:      #c62828;
+    --pl-loss:      #1c5cab;
+    --pl-gain-fill: #c62828;
+    --pl-loss-fill: #1c5cab;
+  }
+
+  /* 棒とハッチを必ず印刷する。これが無いと面がすべて白く抜ける */
+  *, *::before, *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  @page { size: A4 portrait; margin: 14mm 12mm 16mm; }
+
+  html, body { background: #fff; }
+  body { display: block; font-size: 10pt; }
+
+  /* 紙では操作できないものを外す */
+  .sidebar, .btn-future, .btn-load, .btn-reset, .data-source,
+  #tip, #load-report, .print-only-hide { display: none !important; }
+
+  main { padding: 0 !important; max-width: none !important; }
+
+  /* たたんだ解説は、提出先が読めるよう必ず開く（開閉は app.js が行う）。
+     閉じた <details> の中身は CSS では表示できないため、ここではボタンを消すだけ。 */
+  .note-fold > summary { display: none !important; }
+  .note-fold { display: block !important; margin: 0 0 10px; }
+
+  /* 表やカードがページの境目で割れないようにする */
+  section { break-inside: auto; }
+  .card, .kpi, .bar-row, .legend, .callout { break-inside: avoid; }
+  table { break-inside: auto; }
+  thead { display: table-header-group; }       /* 続きの頁にも見出しを出す */
+  tr, .total-row { break-inside: avoid; }
+  h1, h2 { break-after: avoid; }
+
+  /* 画面用の横スクロールは紙では折り返す */
+  .table-wrap { overflow: visible !important; }
+  .table-wrap table:has(.bar-col) { min-width: 0 !important; }
+  .bar-col { width: 150px !important; min-width: 150px !important; }
+
+  a { color: inherit; text-decoration: none; }
+  .kpi-row { gap: 8px; }
+  .card { box-shadow: none; }
 }

@@ -10,7 +10,7 @@
 <aside class="sidebar" id="sidebar"></aside>
 <main>
   <h1>不動産</h1>
-  <p class="page-sub">物件ごとの投資状況と月次収支。時価は持たないため、含み益は表示しません。</p>
+  <p class="page-sub">物件ごとの投資状況と月次収支。時価を入れた物件には含み損益と LTV が出ます。</p>
 
   <section>
     <div class="kpi-row" id="kpis"></div>
@@ -25,6 +25,8 @@
         <span><i class="swatch" style="background:var(--cat-equity)"></i>自己資金</span>
         <span><i class="swatch" style="background:var(--cat-repaid)"></i>累計返済額</span>
         <span><i class="swatch" style="background:var(--cat-debt)"></i>残債</span>
+        <span><i class="swatch swatch-gain"></i>含み益</span>
+        <span><i class="swatch swatch-loss"></i>含み損</span>
       </div>
     </div>
   </section>
@@ -56,29 +58,58 @@
   document.getElementById("sidebar").innerHTML = A.sidebar("realestate.html");
 
   /* KPI */
-  document.getElementById("kpis").innerHTML =
-    [["総投資額", A.yen(A.RE.totalInvestment), "自己資金＋借入額"],
-     ["借入総額", A.yen(A.RE.principal),       "当初の借入額合計"],
-     ["残債合計", A.yen(A.RE.balance),         "現在の返済残り"],
-     ["返済進捗率", A.pct(A.RE.cumulativeRepaid, A.RE.principal), "累計返済額 ÷ 借入総額"]
-    ].map(([l, v, s]) =>
+  const kpis = [["総投資額", A.yen(A.RE.totalInvestment), "自己資金＋借入額"]];
+  if (A.RE.valuedCount) {
+    kpis.push(["時価合計",
+      A.yen(A.RE.marketValue) + (A.RE.allValued ? "" :
+        '<small style="display:block;font-size:11px;font-weight:400;color:var(--text-muted)">' +
+        A.RE.valuedCount + " / " + A.D.realEstate.length + " 物件ぶん</small>"),
+      "手入力の推定値"]);
+  }
+  if (A.RE.allValued) {
+    kpis.push(["含み損益", A.plHTML(A.RE.pl), "時価合計 − 総投資額"]);
+  }
+  kpis.push(["残債合計", A.yen(A.RE.balance), "現在の返済残り"]);
+  if (A.RE.ltv !== null) {
+    kpis.push(["LTV", A.pct(A.RE.balance, A.RE.marketValue), "残債合計 ÷ 時価合計"]);
+  }
+  kpis.push(["返済進捗率", A.pct(A.RE.cumulativeRepaid, A.RE.principal), "累計返済額 ÷ 借入総額"]);
+  document.getElementById("kpis").innerHTML = kpis.map(([l, v, sc]) =>
       '<div class="kpi"><div class="kpi-label">' + l + '</div>' +
-      '<div class="kpi-scope">' + s + '</div>' +
+      '<div class="kpi-scope">' + sc + '</div>' +
       '<div class="kpi-value num">' + v + '</div></div>'
     ).join("");
 
   /* 積み上げ横棒（全物件で同じスケール = 最大の総投資額） */
   const maxInv = Math.max.apply(null, D.realEstate.map(p => p.totalInvestment));
+  /* 投資構成の棒と時価の棒を同じ縮尺にそろえる（片方だけ長く見えないように） */
+  const maxScale = Math.max(maxInv,
+    Math.max.apply(null, D.realEstate.map(p => p.marketValue || 0)));
   document.getElementById("bars").innerHTML = D.realEstate.map(p =>
     '<div class="bar-row">' +
-      '<div class="bar-name">' + p.name + '<small>' + p.loan.lender + '</small></div>' +
+      '<div class="bar-head">' +
+        '<div class="bar-name">' + p.name + '<small>' + p.loan.lender + '</small></div>' +
+        '<div class="bar-total num">' + A.yen(p.totalInvestment) +
+          '<small>返済 ' + A.pct(p.loan.cumulativeRepaid, p.loan.principal) + '</small></div>' +
+      '</div>' +
       A.stackedBar([
         { cls: "seg-equity", value: p.ownFunds,              label: p.name + " 自己資金" },
         { cls: "seg-repaid", value: p.loan.cumulativeRepaid, label: p.name + " 累計返済額" },
         { cls: "seg-debt",   value: p.loan.balance,          label: p.name + " 残債" }
-      ], maxInv) +
-      '<div class="bar-total num">' + A.yen(p.totalInvestment) +
-        '<small>返済 ' + A.pct(p.loan.cumulativeRepaid, p.loan.principal) + '</small></div>' +
+      ], maxScale) +
+      (A.equity(p)
+        ? '<div class="bar-head" style="margin-top:8px">' +
+            '<div class="bar-name" style="font-weight:400;color:var(--text-secondary)">時価' +
+              (p.valuedAt || p.valuationBasis
+                ? '<small>' + [p.valuationBasis, p.valuedAt ? p.valuedAt + " 時点" : null]
+                    .filter(Boolean).join(" ／ ") + '</small>'
+                : '') +
+            '</div>' +
+            '<div class="bar-total num">' + A.yen(p.marketValue) +
+              '<small>' + A.plHTML(A.equity(p).pl) + '</small></div>' +
+          '</div>' +
+          A.plBar(p.totalInvestment, p.marketValue, maxScale, p.name + " 総投資額と時価")
+        : '') +
     '</div>'
   ).join("");
 
@@ -104,6 +135,7 @@
       '<td class="n">' + A.plHTML(A.CF_TOTAL.net) + '</td></tr></tbody>';
 
   /* 物件詳細（行＝物件、列＝属性） */
+  const anyValued = D.realEstate.some(p => A.equity(p));
   const cols = [
     ["住所",     p => p.address || "—"],
     ["広さ",     p => p.areaSqm.toFixed(1) + " m²", 1],
@@ -115,6 +147,14 @@
     ["金利",     p => p.loan.rate.toFixed(1) + " %", 1],
     ["残債",     p => A.plain(p.loan.balance), 1]
   ];
+  if (anyValued) {
+    cols.push(["時価", p => A.equity(p) ? A.plain(p.marketValue) : "—", 1]);
+    cols.push(["含み損益", p => A.equity(p) ? A.plHTML(A.equity(p).pl) : "—", 1]);
+    cols.push(["LTV", p => {
+      const e = A.equity(p);
+      return e && e.ltv !== null ? A.pct(p.loan.balance, p.marketValue) : "—";
+    }, 1]);
+  }
   document.getElementById("detail").innerHTML =
     '<thead><tr><th>物件</th>' +
       cols.map(c => '<th' + (c[2] ? ' class="n"' : '') + '>' + c[0] + '</th>').join("") +
@@ -125,6 +165,7 @@
       '</tr>'
     ).join("") + '</tbody>';
 
+  A.foldNotes();
   A.initTooltip();
 })();
 </script>
