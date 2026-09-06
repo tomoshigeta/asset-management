@@ -103,7 +103,7 @@ def convert(path):
         balance = num(ws.cell(row=r, column=8).value, f"{w} の残債")
         if balance > principal:
             raise InputError(f"{w}: 残債が当初借入額より大きくなっています")
-        tax_year = num(ws.cell(row=r, column=20).value, f"{w} の固定資産税(年額)", allow_blank=True)
+        tax_year = num(ws.cell(row=r, column=22).value, f"{w} の固定資産税(年額)", allow_blank=True)
         # 時価・評価日・評価の根拠はすべて任意。空欄なら項目ごと出さない。
         mv_cell = ws.cell(row=r, column=9).value
         market = None
@@ -111,8 +111,8 @@ def convert(path):
             market = num(mv_cell, f"{w} の時価")
             if market < 0:
                 raise InputError(f"{w}: 時価がマイナスになっています")
-        term_y = num(ws.cell(row=r, column=14).value, f"{w} の借入期間(年)", allow_blank=True)
-        term_m = num(ws.cell(row=r, column=15).value, f"{w} の借入期間(か月)", allow_blank=True)
+        term_y = num(ws.cell(row=r, column=16).value, f"{w} の借入期間(年)", allow_blank=True)
+        term_m = num(ws.cell(row=r, column=17).value, f"{w} の借入期間(か月)", allow_blank=True)
         if term_m < 0 or term_m > 11:
             raise InputError(f"{w}: 借入期間の「か月」は 0〜11 です（12か月以上は「年」に繰り上げてください）")
         data["realEstate"].append({
@@ -124,29 +124,29 @@ def convert(path):
             "totalInvestment": own + principal,
             "ownFunds": own,
             "loan": {
-                "lender": text(ws.cell(row=r, column=12).value, f"{w} の借入先", allow_blank=True),
+                "lender": text(ws.cell(row=r, column=14).value, f"{w} の借入先", allow_blank=True),
                 "principal": principal,
                 "balance": balance,
                 "cumulativeRepaid": principal - balance,
-                "rate": num(ws.cell(row=r, column=13).value, f"{w} の金利", allow_blank=True),
+                "rate": num(ws.cell(row=r, column=15).value, f"{w} の金利", allow_blank=True),
                 # 期間は月数で持つ。小数の年だと端数が何か月なのか復元できないため。
                 "termMonths": int(round(term_y * 12 + term_m)),
-                "monthlyRepayment": num(ws.cell(row=r, column=16).value, f"{w} の毎月の返済額", allow_blank=True),
+                "monthlyRepayment": num(ws.cell(row=r, column=18).value, f"{w} の毎月の返済額", allow_blank=True),
             },
             "monthly": {
-                "rentIncome": num(ws.cell(row=r, column=17).value, f"{w} の家賃収入", allow_blank=True),
-                "managementFee": num(ws.cell(row=r, column=18).value, f"{w} の管理費", allow_blank=True),
-                "repairReserve": num(ws.cell(row=r, column=19).value, f"{w} の修繕積立金", allow_blank=True),
+                "rentIncome": num(ws.cell(row=r, column=19).value, f"{w} の家賃収入", allow_blank=True),
+                "managementFee": num(ws.cell(row=r, column=20).value, f"{w} の管理費", allow_blank=True),
+                "repairReserve": num(ws.cell(row=r, column=21).value, f"{w} の修繕積立金", allow_blank=True),
                 "propertyTaxMonthly": int(round(tax_year / 12)),
             },
         })
         if market is not None:
             prop = data["realEstate"][-1]
             prop["marketValue"] = market
-            valued = ws.cell(row=r, column=10).value
+            valued = ws.cell(row=r, column=12).value
             if valued is not None and str(valued).strip() != "":
                 prop["valuedAt"] = as_of(valued)
-            basis = ws.cell(row=r, column=11).value
+            basis = ws.cell(row=r, column=13).value
             if basis and str(basis).strip():
                 prop["valuationBasis"] = str(basis).strip()
 

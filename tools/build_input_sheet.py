@@ -178,48 +178,65 @@ note(ws, 2, "灰色の「総投資額」「累計返済額」「固定資産税(
 
 RE_HEAD = ["物件名", "住所", "広さ(㎡)", "階数", "築年数",
            "自己資金", "当初借入額", "残債",
-           "時価\n(任意)", "評価日\n(任意)", "評価の根拠\n(任意)",
+           "時価",
+           "月間総収入\n(任意)", "実質利回り\n(任意)", "評価日\n(任意)", "評価の根拠\n(任意)",
            "借入先", "金利(年%)", "借入期間(当初)\n年", "借入期間(当初)\nか月", "毎月の返済額",
            "家賃収入(月)", "管理費(月)", "修繕積立金(月)", "固定資産税(年額)",
            "総投資額", "累計返済額", "固定資産税(月)", "月次収支", "借入期間 合計(か月)", "含み損益"]
 RE_W = [16, 24, 9, 12, 8, 13, 13, 13,
-        15, 12, 20, 14, 10, 11, 11, 13, 13, 12, 13, 15,
+        15, 13, 11, 12, 20, 14, 10, 11, 11, 13, 13, 12, 13, 15,
         14, 13, 14, 13, 15, 14]
 head_row(ws, 4, RE_HEAD, RE_W, freeze_first_col=True)
 RE_R0, RE_R1 = 5, 14                      # 5 = 見本、6..14 = 入力
 ws.cell(row=RE_R0, column=1, value="（例）物件A")
-for col, val in zip(range(2, 21),
+for col, val in zip(range(2, 23),
                     ["東京都港区白金台", 45.5, "3 / 10 階", 15,
                      10000000, 40000000, 35500000,
-                     58000000, "2026-08-01", "不動産会社の査定書",
+                     None, 200000, 4.0, "2026-08-01", "収益還元法",
                      "A銀行", 1.8, 26, 11, 128000,
                      180000, 12000, 8000, 108000]):
-    ws.cell(row=RE_R0, column=col, value=val)
+    if val is not None:
+        ws.cell(row=RE_R0, column=col, value=val)
 for r in range(RE_R0, RE_R1 + 1):
-    ws.cell(row=r, column=21, value=f"=F{r}+G{r}")                       # 総投資額
-    ws.cell(row=r, column=22, value=f"=G{r}-H{r}")                       # 累計返済額
-    ws.cell(row=r, column=23, value=f"=ROUND(T{r}/12,0)")                # 固定資産税(月)
-    ws.cell(row=r, column=24, value=f"=Q{r}-P{r}-R{r}-S{r}-W{r}")        # 月次収支
-    ws.cell(row=r, column=25, value=f"=N{r}*12+O{r}")                    # 借入期間 合計(か月)
-    ws.cell(row=r, column=26, value=f'=IF(I{r}="","",I{r}-U{r})')        # 含み損益 = 時価 − 総投資額
-RE_FMT = {3: NUM1, 6: YEN, 7: YEN, 8: YEN, 9: YEN, 13: RATE, 16: YEN,
-          17: YEN, 18: YEN, 19: YEN, 20: YEN,
-          21: YEN, 22: YEN, 23: YEN, 24: YEN, 26: YEN}
-style_block(ws, RE_R0, RE_R1, 26, {21, 22, 23, 24, 25, 26}, RE_FMT, example_row=RE_R0)
-for c in (21, 22, 23, 24, 25, 26):
+    # 時価。月間総収入と実質利回りを入れれば収益還元法で自動計算する。
+    # 「4」と入れれば 4% として扱う（0.04 と書く必要はない）。
+    # 査定書などの金額を直接入れたいときは、この数式を消して数字を上書きする。
+    ws.cell(row=r, column=9, value=(
+        f'=IF(OR(J{r}="",K{r}=""),"",ROUND((J{r}-T{r}-U{r})*12/(K{r}/100),0))'))
+    ws.cell(row=r, column=23, value=f"=F{r}+G{r}")                       # 総投資額
+    ws.cell(row=r, column=24, value=f"=G{r}-H{r}")                       # 累計返済額
+    ws.cell(row=r, column=25, value=f"=ROUND(V{r}/12,0)")                # 固定資産税(月)
+    ws.cell(row=r, column=26, value=f"=S{r}-R{r}-T{r}-U{r}-Y{r}")        # 月次収支
+    ws.cell(row=r, column=27, value=f"=P{r}*12+Q{r}")                    # 借入期間 合計(か月)
+    ws.cell(row=r, column=28, value=f'=IF(I{r}="","",I{r}-W{r})')        # 含み損益
+RE_FMT = {3: NUM1, 6: YEN, 7: YEN, 8: YEN, 9: YEN, 10: YEN, 11: RATE, 15: RATE, 18: YEN,
+          19: YEN, 20: YEN, 21: YEN, 22: YEN,
+          23: YEN, 24: YEN, 25: YEN, 26: YEN, 28: YEN}
+style_block(ws, RE_R0, RE_R1, 28, {23, 24, 25, 26, 27, 28}, RE_FMT, example_row=RE_R0)
+for c in (23, 24, 25, 26, 27, 28):
     ws.cell(row=RE_R0, column=c).font = EX; ws.cell(row=RE_R0, column=c).fill = FILL_EX
 ws.cell(row=4, column=9).comment = Comment(
     "今売ったらいくらか、の推定額です。空欄で構いません。"
-    "全物件に入れると、①サマリーに総資産と純資産が出ます。"
-    "1件でも空欄なら、純資産は出しません（実態より小さく出るため）。",
-    "入力シート", width=310, height=110)
+    "右の「月間総収入」と「実質利回り」を入れると収益還元法で自動計算します。"
+    "査定書などの金額を直接入れたいときは、この欄に数字を上書きしてください。"
+    "全物件に入れると①サマリーに総資産と純資産が出ます。1件でも空欄なら出しません。",
+    "入力シート", width=330, height=130)
+ws.cell(row=4, column=10).comment = Comment(
+    "収益還元法で時価を出すときの、1か月あたりの総収入（満室想定）です。"
+    "共益費などを含む場合は「家賃収入(月)」と違う金額になって構いません。"
+    "ここから管理費と修繕積立金を引いて12倍し、年間の純収益にします。",
+    "入力シート", width=330, height=110)
 ws.cell(row=4, column=11).comment = Comment(
+    "実質利回りを % のまま入れてください。4% なら「4」、3.5% なら「3.5」です。"
+    "0.04 のように小数で入れる必要はありません（シートが100で割ります）。",
+    "入力シート", width=330, height=100)
+ws.cell(row=4, column=13).comment = Comment(
     "その時価をどう出したか。例: 不動産会社の査定書 / 取引事例 / 路線価から換算 / 自己推定。"
     "空欄で構いませんが、書いておくと後から根拠をたどれます。",
     "入力シート", width=310, height=100)
-ws.cell(row=4, column=20).comment = Comment(
+ws.cell(row=4, column=22).comment = Comment(
     "年額を入れてください。1年ぶんです。右の「固定資産税(月)」は 12 で割った平均月額で、自動計算です。", "入力シート", width=280, height=90)
-ws.cell(row=4, column=14).comment = Comment(
+ws.cell(row=4, column=16).comment = Comment(
     "契約したときの期間です（残りの期間ではありません）。26年11か月なら「年」に 26、「か月」に 11。"
     "ちょうど20年なら 20 と 0。返済回数しか分からないときは 12 で割った商と余りを入れてください。",
     "入力シート", width=300, height=110)
@@ -395,16 +412,16 @@ r += 1
 ws.cell(row=r, column=1, value="不動産").font = H2
 r += 1
 re_items = [
-    ("総投資額",   f"={re_sum_ex('U')}", YEN, "自己資金 ＋ 当初借入額"),
+    ("総投資額",   f"={re_sum_ex('W')}", YEN, "自己資金 ＋ 当初借入額"),
     ("自己資金累計", f"={re_sum_ex('F')}", YEN, ""),
     ("借入総額",   f"={re_sum_ex('G')}", YEN, "当初の借入額の合計"),
     ("残債合計",   f"={re_sum_ex('H')}", YEN, ""),
-    ("累計返済額", f"={re_sum_ex('V')}", YEN, "借入総額 − 残債合計"),
-    ("返済進捗率", f"=IFERROR({re_sum_ex('V')}/{re_sum_ex('G')},0)", PCT1, "累計返済額 ÷ 借入総額"),
-    ("月次収支の合計", f"={re_sum_ex('X')}", YEN, "家賃 − 返済 − 経費。マイナスなら持ち出しです"),
+    ("累計返済額", f"={re_sum_ex('X')}", YEN, "借入総額 − 残債合計"),
+    ("返済進捗率", f"=IFERROR({re_sum_ex('X')}/{re_sum_ex('G')},0)", PCT1, "累計返済額 ÷ 借入総額"),
+    ("月次収支の合計", f"={re_sum_ex('Z')}", YEN, "家賃 − 返済 − 経費。マイナスなら持ち出しです"),
     ("時価合計", f'=IF(COUNT(\'不動産\'!$I${RE_R0+1}:$I${RE_R1})=0,0,{re_sum_ex("I")})', YEN,
                  "手で入れた推定値。空欄の物件は数えません"),
-    ("　うち含み損益", f'=IF(COUNT(\'不動産\'!$I${RE_R0+1}:$I${RE_R1})=0,0,{re_sum_ex("Z")})', YEN,
+    ("　うち含み損益", f'=IF(COUNT(\'不動産\'!$I${RE_R0+1}:$I${RE_R1})=0,0,{re_sum_ex("AB")})', YEN,
                        "時価 − 総投資額（時価を入れた物件だけ）"),
     ("LTV", f'=IFERROR({re_sum_ex("H")}/{re_sum_ex("I")},0)', PCT1, "残債合計 ÷ 時価合計"),
 ]
@@ -481,8 +498,8 @@ checks = [
      '=IF(OR(\'基本情報\'!B4="",\'基本情報\'!B5=""),"要確認","OK")',
      "どちらも必須です"),
     ("借入期間の「か月」が0〜11か",
-     f'=IF(SUMPRODUCT((\'不動産\'!A{RE_R0+1}:A{RE_R1}<>"")*((\'不動産\'!O{RE_R0+1}:O{RE_R1}<0)+'
-     f'(\'不動産\'!O{RE_R0+1}:O{RE_R1}>11)))>0,"要確認","OK")',
+     f'=IF(SUMPRODUCT((\'不動産\'!A{RE_R0+1}:A{RE_R1}<>"")*((\'不動産\'!Q{RE_R0+1}:Q{RE_R1}<0)+'
+     f'(\'不動産\'!Q{RE_R0+1}:Q{RE_R1}>11)))>0,"要確認","OK")',
      "12か月以上は「年」の側に繰り上げてください"),
     ("時価が残債を下回る物件",
      f'=IF(SUMPRODUCT((\'不動産\'!A{RE_R0+1}:A{RE_R1}<>"")*(\'不動産\'!I{RE_R0+1}:I{RE_R1}>0)*'
