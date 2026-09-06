@@ -27,6 +27,9 @@
 - **データは JSON 1枚が正。** 形式は `data/template.json`、項目の説明は `data/README.md`。
   `mock/data.js` は同じ形式のサンプルで、画面は「JSONファイルを読み込む」で本物に切り替える。
   守るべき不変条件は `mock/README.md`
+- **入力欄の並び順は使う順。** よく使う欄を右奥に置かない。
+  時価を17列目に置いて「欄が無い」と言われた実績がある。
+  列を足すときは、その欄をいつ見るかで位置を決める
 - **入力は Excel（`data/input-sheet.xlsx`）が下書き。** `tools/xlsx_to_json.py` で JSON に変換する。
   シートを直したら `tools/build_input_sheet.py` を実行して作り直し、変換ツールの列位置も合わせる。
   `tools/` は画面の動作に関係しない（外部依存ゼロの制約は `mock/` の話）
