@@ -32,6 +32,44 @@ FILL_NG   = PatternFill("solid", fgColor="FFC7CE")
 THIN = Side(style="thin", color="BFBFBF")
 BOX  = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 
+# 決まった値しか入らない欄は、打ち間違いを防ぐためプルダウンにする。
+# LOAN_TYPES の「車」は提出用ページの円グラフで「自動車ローン」に振り分けられる。
+# それ以外はすべて「多目的・その他ローン」にまとまる（分類は3つに保つため）。
+LOAN_TYPES  = ["車", "多目的", "リフォーム", "教育", "事業", "その他"]
+BASIS_HINTS = ["不動産会社の査定書", "収益還元法", "取引事例比較法",
+               "路線価から換算", "固定資産税評価額から換算", "自己推定"]
+SEC_REGIONS = ["国内", "海外"]
+SEC_CLASSES = ["株", "債券", "投資信託", "その他"]
+
+CUR_RANGE = "=基本情報!$A$10:$A$13"      # 為替レート表の通貨コード欄
+
+def currency_dropdown(ws, cells):
+    """通貨は「基本情報」のレート表から選ぶ。レートの無い通貨は選べない。"""
+    dv = DataValidation(type="list", formula1=CUR_RANGE, allow_blank=True,
+                        showErrorMessage=True)
+    dv.errorTitle = "レートのある通貨から選んでください"
+    dv.error = "「基本情報」タブの為替レート表にある通貨だけ使えます。"
+    dv.promptTitle = "通貨"
+    dv.prompt = "「基本情報」タブのレート表から選びます。他の通貨を使うときは、先にレートを足してください。"
+    dv.showInputMessage = True
+    ws.add_data_validation(dv)
+    dv.add(cells)
+
+def dropdown(ws, cells, choices, strict=True, prompt=None):
+    """cells の範囲にプルダウンを付ける。
+       strict=False なら一覧に無い値も打てる（あくまで候補）。"""
+    dv = DataValidation(type="list", formula1='"' + ",".join(choices) + '"',
+                        allow_blank=True, showErrorMessage=strict)
+    if strict:
+        dv.errorTitle = "一覧から選んでください"
+        dv.error = "この欄は " + " / ".join(choices) + " のどれかです。"
+    if prompt:
+        dv.promptTitle = "入力のヒント"
+        dv.prompt = prompt
+        dv.showInputMessage = True
+    ws.add_data_validation(dv)
+    dv.add(cells)
+
 YEN  = '#,##0;(#,##0);-'
 PCT1 = '0.0%'
 RATE = '0.00"%"'
@@ -230,6 +268,8 @@ ws.cell(row=4, column=11).comment = Comment(
     "実質利回りを % のまま入れてください。4% なら「4」、3.5% なら「3.5」です。"
     "0.04 のように小数で入れる必要はありません（シートが100で割ります）。",
     "入力シート", width=330, height=100)
+dropdown(ws, f"M{RE_R0}:M{RE_R1}", BASIS_HINTS, strict=False,
+         prompt="一覧から選べます。ここに無い書き方を直接入れても構いません。")
 ws.cell(row=4, column=13).comment = Comment(
     "その時価をどう出したか。例: 不動産会社の査定書 / 取引事例 / 路線価から換算 / 自己推定。"
     "空欄で構いませんが、書いておくと後から根拠をたどれます。",
@@ -284,8 +324,9 @@ for col, f in ((4, f"=SUM(D{SEC_R0}:D{SEC_R1})"), (5, f"=SUM(E{SEC_R0}:E{SEC_R1}
     c = ws.cell(row=tot, column=col, value=f)
     c.font, c.number_format, c.border = H2, YEN, BOX
 note(ws, tot, "※ 通貨が違うので、この行の取得原価と評価額の合計は目安です）", col=6)
-dv = DataValidation(type="list", formula1='"JPY,USD,EUR"', allow_blank=False)
-ws.add_data_validation(dv); dv.add(f"C{SEC_R0}:C{SEC_R1}")
+currency_dropdown(ws, f"C{SEC_R0}:C{SEC_R1}")
+dropdown(ws, f"A{SEC_R0}:A{SEC_R1}", SEC_REGIONS)
+dropdown(ws, f"B{SEC_R0}:B{SEC_R1}", SEC_CLASSES)
 ws.cell(row=5, column=3).comment = Comment(
     "「基本情報」タブの為替レートに書いた通貨だけ使えます。", "入力シート", width=260, height=70)
 
@@ -304,8 +345,7 @@ ws.cell(row=DEP_R0, column=3, value=2000000)
 for r in range(DEP_R0, DEP_R1 + 1):
     ws.cell(row=r, column=4, value=f"=IF(A{r}=\"\",\"\",ROUND(C{r}*IFERROR(INDEX('基本情報'!$B$10:$B$13,MATCH(B{r},'基本情報'!$A$10:$A$13,0)),0),0))")
 style_block(ws, DEP_R0, DEP_R1, 4, {4}, {3: YEN, 4: YEN}, example_row=DEP_R0)
-dv2 = DataValidation(type="list", formula1='"JPY,USD,EUR"', allow_blank=True)
-ws.add_data_validation(dv2); dv2.add(f"B{DEP_R0}:B{DEP_R1}")
+currency_dropdown(ws, f"B{DEP_R0}:B{DEP_R1}")
 c = ws.cell(row=DEP_R1 + 1, column=1, value="合計（見本行は数えません）"); c.font = H2
 c = ws.cell(row=DEP_R1 + 1, column=4, value=f"=SUM(D{DEP_R0 + 1}:D{DEP_R1})")
 c.font, c.number_format, c.border = H2, YEN, BOX
@@ -340,8 +380,7 @@ for col in (10, 11):
     c = ws.cell(row=INS_R1 + 1, column=col,
                 value=f"=SUM({get_column_letter(col)}{INS_R0 + 1}:{get_column_letter(col)}{INS_R1})")
     c.font, c.number_format, c.border = H2, YEN, BOX
-dv3 = DataValidation(type="list", formula1='"JPY,USD,EUR"', allow_blank=True)
-ws.add_data_validation(dv3); dv3.add(f"C{INS_R0}:C{INS_R1}")
+currency_dropdown(ws, f"C{INS_R0}:C{INS_R1}")
 ws.cell(row=6, column=4).comment = Comment(
     "これまでに払った保険料の合計です。取得原価にあたります。", "入力シート", width=260, height=70)
 ws.cell(row=6, column=7).comment = Comment(
@@ -366,6 +405,13 @@ for col, val in zip(range(1, 8), ["（例）自動車ローン", "車", "D銀行
 for r in range(OL_R0, OL_R1 + 1):
     ws.cell(row=r, column=8, value=f"=IF(A{r}=\"\",\"\",D{r}-E{r})")
 style_block(ws, OL_R0, OL_R1, 8, {8}, {4: YEN, 5: YEN, 6: RATE, 7: YEN, 8: YEN}, example_row=OL_R0)
+dropdown(ws, f"B{OL_R0}:B{OL_R1}", LOAN_TYPES,
+         prompt="提出用ページの円グラフでは「車」だけ自動車ローンに分かれ、"
+                "それ以外は「多目的・その他ローン」にまとまります。")
+ws.cell(row=5, column=2).comment = Comment(
+    "一覧から選んでください。ここで選んだ種類が、提出用ページの円グラフの分類になります。"
+    "「車」を選んだものだけが自動車ローンとして集計されます。",
+    "入力シート", width=320, height=100)
 
 # ============================================================
 # 検算
@@ -501,6 +547,11 @@ checks = [
      f'=IF(SUMPRODUCT((\'不動産\'!A{RE_R0+1}:A{RE_R1}<>"")*((\'不動産\'!Q{RE_R0+1}:Q{RE_R1}<0)+'
      f'(\'不動産\'!Q{RE_R0+1}:Q{RE_R1}>11)))>0,"要確認","OK")',
      "12か月以上は「年」の側に繰り上げてください"),
+    ("種類が「車」なのに車の借入でない",
+     f'=IF(COUNTIFS(\'その他の借入\'!B{OL_R0+1}:B{OL_R1},"車")<>'
+     f'COUNTIFS(\'その他の借入\'!A{OL_R0+1}:A{OL_R1},"*車*",'
+     f'\'その他の借入\'!B{OL_R0+1}:B{OL_R1},"車"),"要確認","OK")',
+     "名前に「車」が無いのに種類が「車」の借入があります。円グラフで自動車ローンに入ります"),
     ("時価が残債を下回る物件",
      f'=IF(SUMPRODUCT((\'不動産\'!A{RE_R0+1}:A{RE_R1}<>"")*(\'不動産\'!I{RE_R0+1}:I{RE_R1}>0)*'
      f'(\'不動産\'!I{RE_R0+1}:I{RE_R1}<\'不動産\'!H{RE_R0+1}:H{RE_R1}))>0,"要確認","OK")',
