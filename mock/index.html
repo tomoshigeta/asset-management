@@ -42,7 +42,8 @@
   document.getElementById("headline").innerHTML =
     '<div class="kpi lg">' +
       '<div class="kpi-label">金融資産合計</div>' +
-      '<div class="kpi-scope">有価証券＋預貯金（不動産を含まない）</div>' +
+      '<div class="kpi-scope">有価証券' + (A.INS.length ? '＋保険' : '') +
+        '＋預貯金（不動産を含まない）</div>' +
       '<div class="kpi-value num">' + A.yen(A.FINANCIAL_ASSETS) + '</div>' +
       '<div class="kpi-sub">うち含み損益 ' + A.plHTML(A.FIN_PL) + '</div>' +
     '</div>' +

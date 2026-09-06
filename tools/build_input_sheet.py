@@ -454,6 +454,9 @@ ws.conditional_formatting.add(
     CellIsRule(operator="equal", formula=['"要確認"'], fill=FILL_NG,
                font=Font(name=F, size=10, bold=True, color="9C0006")))
 
+# タブの並びを画面（③のページ）と同じ 有価証券 → 保険 → 預貯金 にそろえる
+wb.move_sheet("保険", offset=-1)
+
 # 印刷しても横で切れないように、各シートを横向き・幅1ページに収める
 for sh in wb.worksheets:
     sh.page_setup.orientation = "landscape"
