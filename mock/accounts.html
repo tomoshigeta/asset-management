@@ -20,8 +20,9 @@
     <h2>有価証券</h2>
     <p class="sec-note">
       資産クラス別・評価額ベース。<b>緑＝元本のうち失われていない部分</b>、
-      斜めハッチが損益です。含み益なら元本の右に赤が積み増され、
-      含み損なら元本が青の分だけ削られます。棒の全長は取得原価と評価額の大きい方。
+      斜めハッチが損益です。<b>棒はどの行も同じ長さ</b>で、その行の取得原価と評価額の
+      大きい方が100%です。含み損益が元本に対してどのくらいかを見るためのもので、
+      クラス間の金額の大小は左の数字で読みます。
       「その他」は暗号資産・金・銀などの現物資産をまとめる器です（保険は下の「保険」に分けています）。
       外貨は元通貨で保持し、1&nbsp;USD&nbsp;=&nbsp;<span id="rate" class="num"></span>&nbsp;円で換算しています。
     </p>
@@ -41,7 +42,7 @@
     <p class="sec-note">
       評価額には<b>解約返戻金</b>（今解約したら戻る額）を使います。他の資産と同じ
       「今これを現金にしたらいくらか」に答えるためです。取得原価にあたるのは<b>払込保険料累計</b>。
-      棒の読み方は有価証券と同じで、斜めハッチが損益です（トラック全体＝最大の契約）。
+      棒の読み方は有価証券と同じで、斜めハッチが損益です（<b>どの行も同じ長さ</b>・各行が100%）。
       <b>払った保険料には保障の対価が含まれる</b>ため、この損益は投資の損益とは意味が違います。
       <b>死亡保険金額は資産に加えていません</b>（今使える金額ではないため・参考として右端に表示）。
     </p>
@@ -109,7 +110,10 @@
   const CLASSES = ["株", "債券", "投資信託", "その他"];
   const REGION  = { domestic: "国内", overseas: "海外" };
   const find = (r, c) => A.SEC.find(s => s.region === r && s.assetClass === c);
-  const secMax = Math.max.apply(null, A.SEC.map(s => Math.max(s.valueJPY, s.costJPY)));
+  /* 棒はどの行も同じ長さ（その行の max(取得原価, 評価額) ＝ 100%）。
+     最大クラス基準だと小さいクラスが潰れて含み損益が読めなかったため。
+     クラス間の大小は金額の列で読む。負債の表と同じ考え方。 */
+  const rowMax = s => Math.max(s.valueJPY, s.costJPY);
 
   let secBody = "";
   Object.keys(REGION).forEach(region => {
@@ -122,7 +126,7 @@
       if (!s) {
         return '<tr><td>' + name + '</td>' +
           '<td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td>' +
-          '<td>' + A.plBar(0, 0, secMax, "") + '</td></tr>';
+          '<td>' + A.plBar(0, 0, 1, "") + '</td></tr>';
       }
       const native = s.currency === "JPY" ? "" :
         '<small style="color:var(--text-muted)"> ' + s.currency + " " + A.plain(s.marketValue) + "</small>";
@@ -132,7 +136,7 @@
         '<td class="n num">' + A.plain(s.valueJPY) + native + '</td>' +
         '<td class="n">' + A.plHTML(s.plJPY) + '</td>' +
         '<td class="n">' + A.plPctHTML(s.plJPY, s.costJPY) + '</td>' +
-        '<td>' + A.plBar(s.costJPY, s.valueJPY, secMax,
+        '<td>' + A.plBar(s.costJPY, s.valueJPY, rowMax(s),
             REGION[region] + " " + cls) + '</td>' +
       '</tr>';
     }).join("");
@@ -140,7 +144,7 @@
   document.getElementById("sec").innerHTML =
     '<thead><tr><th>クラス</th><th class="n">取得原価</th><th class="n">評価額</th>' +
     '<th class="n">含み損益</th><th class="n">損益率</th>' +
-    '<th class="bar-col">元本と含み損益（最大クラス＝100%）</th></tr></thead>' +
+    '<th class="bar-col">元本と含み損益（各行＝100%）</th></tr></thead>' +
     '<tbody>' + secBody +
     '<tr class="total-row"><td>合計</td>' +
       '<td class="n num">' + A.plain(A.SEC_COST) + '</td>' +
@@ -154,13 +158,13 @@
      契約が無いときはセクションごと隠す。 */
   if (A.INS.length) {
     document.getElementById("sec-insurance").hidden = false;
-    const insMax = Math.max.apply(null, A.INS.map(x => Math.max(x.valueJPY, x.costJPY)));
+    /* 保険も各行100%。契約ごとの規模は金額の列で読む。 */
     const hasDeath = A.INS.some(x => x.deathBenefit);
     document.getElementById("ins").innerHTML =
       '<thead><tr><th>保険</th><th class="n">払込保険料</th><th class="n">解約返戻金</th>' +
       '<th class="n">含み損益</th><th class="n">損益率</th>' +
       (hasDeath ? '<th class="n">死亡保険金額<small style="display:block;font-weight:400;color:var(--text-muted)">参考・資産に含めず</small></th>' : '') +
-      '<th class="bar-col">払込保険料と含み損益（最大の契約＝100%）</th></tr></thead><tbody>' +
+      '<th class="bar-col">払込保険料と含み損益（各行＝100%）</th></tr></thead><tbody>' +
       A.INS.map(x => {
         const sub = [x.insurer, x.valuedAt ? x.valuedAt + " 時点" : null, x.note]
           .filter(Boolean).join(" ／ ");
@@ -175,7 +179,7 @@
           '<td class="n">' + A.plPctHTML(x.plJPY, x.costJPY) + '</td>' +
           (hasDeath ? '<td class="n num" style="color:var(--text-muted)">' +
             (x.deathBenefit ? A.plain(x.deathBenefit * (A.D.rates[x.currency] || 1)) : "—") + '</td>' : '') +
-          '<td>' + A.plBar(x.costJPY, x.valueJPY, insMax, x.name) + '</td></tr>';
+          '<td>' + A.plBar(x.costJPY, x.valueJPY, Math.max(x.costJPY, x.valueJPY), x.name) + '</td></tr>';
       }).join("") +
       '<tr class="total-row"><td>合計</td>' +
         '<td class="n num">' + A.plain(A.INS_COST) + '</td>' +

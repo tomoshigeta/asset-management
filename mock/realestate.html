@@ -18,7 +18,7 @@
 
   <section>
     <h2>物件別 投資構成</h2>
-    <p class="sec-note">横軸は総投資額。棒の長さは物件間で比較できます。</p>
+    <p class="sec-note"><b>棒はどの物件も同じ長さ</b>で、その物件の総投資額が100%です。自己資金・累計返済額・残債の割合、つまり<b>返済がどこまで進んだか</b>を横に並べて比べます。物件の規模は棒の右の金額で読みます。時価を入れた物件には、その下に時価の棒が出ます。</p>
     <div class="card">
       <div class="bars" id="bars"></div>
       <div class="legend">
@@ -81,10 +81,11 @@
     ).join("");
 
   /* 積み上げ横棒（全物件で同じスケール = 最大の総投資額） */
-  const maxInv = Math.max.apply(null, D.realEstate.map(p => p.totalInvestment));
-  /* 投資構成の棒と時価の棒を同じ縮尺にそろえる（片方だけ長く見えないように） */
-  const maxScale = Math.max(maxInv,
-    Math.max.apply(null, D.realEstate.map(p => p.marketValue || 0)));
+  /* 棒はどの物件も同じ長さ。投資構成は「その物件の総投資額＝100%」、
+     時価は「その物件の max(総投資額, 時価) ＝ 100%」。
+     物件ごとに縮尺を変えるのは、規模の違う物件が並ぶと小さい方が潰れて
+     返済の進み具合が読めなくなるため（負債の表と同じ考え方）。
+     金額そのものは棒の上の数字で読む。 */
   document.getElementById("bars").innerHTML = D.realEstate.map(p =>
     '<div class="bar-row">' +
       '<div class="bar-head">' +
@@ -96,7 +97,7 @@
         { cls: "seg-equity", value: p.ownFunds,              label: p.name + " 自己資金" },
         { cls: "seg-repaid", value: p.loan.cumulativeRepaid, label: p.name + " 累計返済額" },
         { cls: "seg-debt",   value: p.loan.balance,          label: p.name + " 残債" }
-      ], maxScale) +
+      ], p.totalInvestment) +
       (A.equity(p)
         ? '<div class="bar-head" style="margin-top:8px">' +
             '<div class="bar-name" style="font-weight:400;color:var(--text-secondary)">時価' +
@@ -108,7 +109,8 @@
             '<div class="bar-total num">' + A.yen(p.marketValue) +
               '<small>' + A.plHTML(A.equity(p).pl) + '</small></div>' +
           '</div>' +
-          A.plBar(p.totalInvestment, p.marketValue, maxScale, p.name + " 総投資額と時価")
+          A.plBar(p.totalInvestment, p.marketValue,
+            Math.max(p.totalInvestment, p.marketValue), p.name + " 総投資額と時価")
         : '') +
     '</div>'
   ).join("");

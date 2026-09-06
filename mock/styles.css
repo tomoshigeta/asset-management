@@ -557,3 +557,13 @@ tr.total-row td { font-weight: 700; border-top: 1px solid var(--border-strong); 
   .kpi-row { gap: 8px; }
   .card { box-shadow: none; }
 }
+
+/* ---------- 行の縞模様 ----------
+   行が増えたときに横方向の視線がずれないようにする。
+   見出し行・グループ行・合計行には掛けない。 */
+tbody tr:nth-of-type(even):not(.group-row):not(.total-row) { background: var(--surface-2); }
+tbody tr.group-row { background: var(--surface-2); }
+@media print {
+  tbody tr:nth-of-type(even):not(.group-row):not(.total-row) { background: #f4f4f2; }
+  tbody tr.group-row { background: #e8e8e4; }
+}

@@ -50,6 +50,32 @@
 }
 .btn-print:hover { border-color: var(--focus); }
 .report-section { margin-bottom: 30px; }
+.pie-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+.pie-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+.pie-card h3 { font-size: 13px; margin: 0 0 2px; }
+.pie-card .pie-sub { font-size: 11px; color: var(--text-muted); margin: 0 0 12px; }
+/* 円と凡例は必ず横並び。折り返すと2つの円でレイアウトが食い違う。 */
+.pie-body { display: flex; align-items: center; gap: 12px; flex-wrap: nowrap; }
+.pie-body svg { flex: 0 0 auto; }
+.pie-legend { flex: 1 1 0; min-width: 0; font-size: 11.5px; border-collapse: collapse; }
+.pie-legend td { padding: 4px 0; border: none; white-space: nowrap; }
+.pie-legend td + td { padding-left: 10px; }
+.pie-legend td:first-child { white-space: normal; }
+.pie-legend .swatch { flex: 0 0 auto; }
+.pie-legend .total-row td { border-top: 1px solid var(--border); font-weight: 700; }
+.pie-none { font-size: 12px; color: var(--text-secondary); line-height: 1.8; }
+.pie-none b { color: var(--text-primary); }
+@media print { .pie-card { break-inside: avoid; } }
 .report-section > h2 {
   font-size: 15px;
   border-left: 4px solid var(--text-primary);
@@ -86,6 +112,7 @@
   <div class="report-section">
     <h2>1. 総括</h2>
     <div class="kpi-row" id="r-headline"></div>
+    <div class="pie-row" id="r-pies"></div>
     <div class="callout" id="r-note"></div>
   </div>
 
@@ -160,8 +187,8 @@
           "不動産 " + A.yen(A.RE.balance) + " ／ その他 " + A.yen(A.OTHER_DEBT)) +
       kpi("純資産", "総資産 − 総負債", A.yen(A.NET_WORTH));
     el("r-note").innerHTML =
-      "<b>不動産の時価は保有者が入力した推定値です。</b>" +
-      "売却価格が一意に決まるものではないため、純資産の確からしさは時価の確からしさに依存します。" +
+      "<b>不動産の時価は保有者による評価額です。</b>" +
+      "類似物件の取引事例などから見積もった金額であり、金融機関による担保評価とは別のものです。" +
       "評価の根拠と評価日は「2. 不動産」の表に記載しています。";
   } else {
     el("r-headline").innerHTML =
@@ -174,6 +201,28 @@
       "不動産の時価を金額として持たないため資産に含めず、借入だけが総負債に含まれます。" +
       "この非対称のまま引き算すると純資産が実態より小さく出るため、合算せず並べています。";
   }
+
+  /* ---------- 円グラフ（構成比） ---------- */
+  function pieCard(spec, colors) {
+    const chart = A.pieChart(spec.slices, colors, { title: spec.title });
+    let body;
+    if (chart.drawn) {
+      body = '<div class="pie-body">' + chart.svg + chart.legend + "</div>";
+    } else {
+      /* 中身が1〜2種類のときは円にしない（1スライスの円は情報がない）。 */
+      const rows = chart.rows.length
+        ? chart.rows.map(r => "<div><b>" + r.label + "</b> " + A.yen(r.value) +
+            "（" + (r.value / chart.total * 100).toFixed(1) + "%）</div>").join("")
+        : "<div>該当なし</div>";
+      body = '<div class="pie-none">' + rows +
+        (chart.rows.length === 1 ? "<div>内訳が1種類のため、円グラフにしていません。</div>" : "") +
+        "</div>";
+    }
+    return '<div class="pie-card"><h3>' + spec.title + "</h3>" +
+      '<p class="pie-sub">' + (spec.note || "構成比") + "</p>" + body + "</div>";
+  }
+  el("r-pies").innerHTML =
+    pieCard(A.assetSlices(), A.PIE_ASSET) + pieCard(A.debtSlices(), A.PIE_DEBT);
 
   /* ---------- 2. 不動産 ---------- */
   const reKpi = [["総投資額", A.yen(A.RE.totalInvestment), "自己資金＋借入額"]];
@@ -366,7 +415,7 @@
     "金額はすべて基準日時点、期間を持つ金額は月額です（固定資産税は年額を12で割った平均月額。火災保険料は含みません）。" +
     "外貨建の資産は上記の為替レートで円換算しています。" +
     (A.INS.length ? "保険の評価額は解約返戻金であり、払込保険料には保障の対価が含まれるため、含み損益は投資の損益とは性質が異なります。死亡保険金額は資産に含めていません。" : "") +
-    (A.RE.allValued ? "不動産の時価は保有者による推定値です。" : "") +
+    (A.RE.allValued ? "不動産の時価は保有者による評価額（類似物件の取引事例等に基づく見積り）であり、金融機関の担保評価とは別のものです。" : "") +
     "有価証券の評価額は基準日時点の時価であり、確定した売却価額ではありません。";
 
   A.initTooltip();

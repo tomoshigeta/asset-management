@@ -399,6 +399,83 @@
     return stackedBar(segs, max);
   }
 
+  /* ---------- 円グラフ ----------
+     構成比を一目で示すためだけに使う。金額は横の凡例で読む。
+     SPEC で一度却下したが、分類を3つに固定したため
+     「口座や借入先が増えると読めなくなる」という却下理由が当たらない。
+     色は dataviz スキルの validate_palette.js で両モード・全ペアを検証済み。 */
+  const PIE_ASSET = ["#bb6802", "#0089ca", "#319751"];   /* 不動産 / 有価証券 / 預貯金 */
+  const PIE_DEBT  = ["#bb6802", "#8e6ac7", "#00989a"];   /* 不動産 / 多目的 / 自動車 */
+
+  /**
+   * slices = [{label, value}]。合計が0、または中身が1種類なら描かない
+   * （1スライスの円は情報がなく、2スライスも棒や数字に劣るため）。
+   * 戻り値は {svg, legend, drawn}。
+   */
+  function pieChart(slices, colors, opts) {
+    const o = opts || {};
+    const use = slices.filter(s => s.value > 0);
+    const total = sum(use, s => s.value);
+    if (use.length < 3 || total <= 0) return { drawn: false, rows: use, total: total };
+
+    const size = o.size || 140, r = size / 2 - 2, cx = size / 2, cy = size / 2;
+    const gap = 0.012;                       /* スライス間のすき間（ラジアン） */
+    let angle = -Math.PI / 2;                /* 12時から時計回り */
+    const paths = use.map((sl, i) => {
+      const frac = sl.value / total;
+      const a0 = angle + gap / 2, a1 = angle + frac * Math.PI * 2 - gap / 2;
+      angle += frac * Math.PI * 2;
+      const large = (a1 - a0) > Math.PI ? 1 : 0;
+      const x0 = cx + r * Math.cos(a0), y0 = cy + r * Math.sin(a0);
+      const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+      const d = "M " + cx + " " + cy + " L " + x0.toFixed(2) + " " + y0.toFixed(2) +
+                " A " + r + " " + r + " 0 " + large + " 1 " + x1.toFixed(2) + " " + y1.toFixed(2) + " Z";
+      return '<path d="' + d + '" fill="' + colors[i % colors.length] + '"' +
+             ' data-tip="' + sl.label + "<br><b>" + yen(sl.value) + "</b>（" +
+             (frac * 100).toFixed(1) + '%）"></path>';
+    }).join("");
+
+    const svg = '<svg viewBox="0 0 ' + size + " " + size + '" width="' + size + '" height="' + size +
+      '" role="img" aria-label="' + (o.title || "構成比") + '">' + paths + "</svg>";
+
+    /* 凡例は必ず出す。色だけに意味を持たせないため、名前・金額・割合を並べる。 */
+    const legend = '<table class="pie-legend">' + use.map((sl, i) =>
+      '<tr><td><i class="swatch" style="background:' + colors[i % colors.length] + '"></i>' +
+        sl.label + "</td>" +
+      '<td class="n num">' + yen(sl.value) + "</td>" +
+      '<td class="n num">' + (sl.value / total * 100).toFixed(1) + "%</td></tr>").join("") +
+      '<tr class="total-row"><td>合計</td><td class="n num">' + yen(total) +
+      '</td><td class="n num">100.0%</td></tr></table>';
+    return { drawn: true, svg: svg, legend: legend, total: total, rows: use };
+  }
+
+  /* 資産の3分類。不動産の時価がそろっていれば不動産を立て、
+     そうでなければ金融資産だけを3つに割る（常に3スライスに保つ）。 */
+  function assetSlices() {
+    if (RE.allValued && RE.marketValue > 0) {
+      return { title: "総資産の内訳", slices: [
+        { label: "不動産（時価）", value: RE.marketValue },
+        { label: "有価証券", value: SEC_VALUE },
+        { label: INS_VALUE > 0 ? "預貯金・保険" : "預貯金", value: DEPOSITS + INS_VALUE }
+      ] };
+    }
+    return { title: "金融資産の内訳", note: "不動産は時価が未入力のため含みません", slices: [
+      { label: "有価証券", value: SEC_VALUE },
+      { label: "保険（解約返戻金）", value: INS_VALUE },
+      { label: "預貯金", value: DEPOSITS }
+    ] };
+  }
+
+  /* 負債の3分類。増えても3つのままにするため、車以外はすべて「多目的・その他」に寄せる。 */
+  function debtSlices() {
+    const car = sum(D.otherLoans.filter(l => l.type === "車"), l => l.balance);
+    return { title: "総負債の内訳", slices: [
+      { label: "不動産ローン", value: RE.balance },
+      { label: "多目的・その他ローン", value: OTHER_DEBT - car },
+      { label: "自動車ローン", value: car }
+    ] };
+  }
+
   /* ---------- サイドバー ---------- */
   function sidebar(current) {
     const pages = [
@@ -507,6 +584,7 @@
     FINANCIAL_ASSETS, OTHER_DEBT, TOTAL_DEBT, CF_TOTAL,
     TOTAL_ASSETS, NET_WORTH, equity,
     yen, plain, pl, plHTML, plPctHTML, pct, sum, cashflow, fmtTerm,
-    stackedBar, valueBar, plBar, sidebar, initTooltip, foldNotes
+    stackedBar, valueBar, plBar, sidebar, initTooltip, foldNotes,
+    pieChart, assetSlices, debtSlices, PIE_ASSET, PIE_DEBT
   };
 })();
